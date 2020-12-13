@@ -103,7 +103,9 @@ local flows = {
 "xtls-rprx-origin",
 "xtls-rprx-origin-udp443",
 "xtls-rprx-direct",
-"xtls-rprx-direct-udp443"
+"xtls-rprx-direct-udp443",
+"xtls-rprx-splice",
+"xtls-rprx-splice-udp443"
 }
 
 m = Map(shadowsocksr, translate("Edit ShadowSocksR Server"))
@@ -128,12 +130,9 @@ o:value("ssr", translate("ShadowsocksR"))
 if nixio.fs.access("/usr/bin/ss-redir") then
 o:value("ss", translate("Shadowsocks New Version"))
 end
-if nixio.fs.access("/usr/bin/v2ray/v2ray") or nixio.fs.access("/usr/bin/v2ray") then
-o:value("v2ray", translate("V2Ray"))
+if nixio.fs.access("/usr/bin/xray") or nixio.fs.access("/usr/bin/xray/xray") or nixio.fs.access("/usr/bin/v2ray/v2ray") or nixio.fs.access("/usr/bin/v2ray") then
+o:value("vmess", translate("Vmess"))
 o:value("vless", translate("VLESS"))
-end
-if nixio.fs.access("/usr/bin/xray") then
-o:value("xray", translate("XRay"))
 end
 if nixio.fs.access("/usr/sbin/trojan") then
 o:value("trojan", translate("Trojan"))
@@ -161,9 +160,8 @@ o.datatype = "host"
 o.rmempty = false
 o:depends("type", "ssr")
 o:depends("type", "ss")
-o:depends("type", "v2ray")
+o:depends("type", "vmess")
 o:depends("type", "vless")
-o:depends("type", "xray")
 o:depends("type", "trojan")
 o:depends("type", "naiveproxy")
 o:depends("type", "socks5")
@@ -173,9 +171,8 @@ o.datatype = "port"
 o.rmempty = false
 o:depends("type", "ssr")
 o:depends("type", "ss")
-o:depends("type", "v2ray")
+o:depends("type", "vmess")
 o:depends("type", "vless")
-o:depends("type", "xray")
 o:depends("type", "trojan")
 o:depends("type", "naiveproxy")
 o:depends("type", "socks5")
@@ -239,28 +236,26 @@ o = s:option(Value, "alter_id", translate("AlterId"))
 o.datatype = "port"
 o.default = 16
 o.rmempty = true
-o:depends("type", "v2ray")
+o:depends("type", "vmess")
 
 -- VmessId
 o = s:option(Value, "vmess_id", translate("Vmess/VLESS ID (UUID)"))
 o.rmempty = true
 o.default = uuid
-o:depends("type", "v2ray")
+o:depends("type", "vmess")
 o:depends("type", "vless")
-o:depends("type", "xray")
 
 -- VLESS Encryption
 o = s:option(Value, "vless_encryption", translate("VLESS Encryption"))
 o.rmempty = true
 o.default = "none"
 o:depends("type", "vless")
-o:depends("type", "xray")
 
 -- 加密方式
 o = s:option(ListValue, "security", translate("Encrypt Method"))
 for _, v in ipairs(securitys) do o:value(v, v:upper()) end
 o.rmempty = true
-o:depends("type", "v2ray")
+o:depends("type", "vmess")
 
 -- 传输协议
 o = s:option(ListValue, "transport", translate("Transport"))
@@ -270,9 +265,8 @@ o:value("ws", "WebSocket")
 o:value("h2", "HTTP/2")
 o:value("quic", "QUIC")
 o.rmempty = true
-o:depends("type", "v2ray")
+o:depends("type", "vmess")
 o:depends("type", "vless")
-o:depends("type", "xray")
 
 -- [[ TCP部分 ]]--
 
@@ -389,56 +383,53 @@ o.default = 2
 o.rmempty = true
 
 o = s:option(Value, "seed", translate("Obfuscate password (optional)"))
-o:depends("transport", "kcp")
+o:depends({type="vless",transport="kcp"})
 o.rmempty = true
 
 o = s:option(Flag, "congestion", translate("Congestion"))
 o:depends("transport", "kcp")
 o.rmempty = true
 
--- [[ allowInsecure ]]--
-o = s:option(Flag, "insecure", translate("allowInsecure"))
-o.rmempty = false
-o:depends("type", "v2ray")
-o:depends("type", "vless")
-o:depends("type", "xray")
-o:depends("type", "trojan")
-o.default = "1"
-o.description = translate("If true, allowss insecure connection at TLS client, e.g., TLS server uses unverifiable certificates.")
 -- [[ TLS ]]--
 o = s:option(Flag, "tls", translate("TLS"))
 o.rmempty = true
 o.default = "0"
-o:depends("type", "v2ray")
-o:depends("type", "vless")
-o:depends("type", "xray")
+o:depends("type", "vmess")
+o:depends({type="vless", xtls=false})
 o:depends("type", "trojan")
 
 o = s:option(Value, "tls_host", translate("TLS Host"))
---o:depends("type", "trojan")
+o:depends("type", "trojan")
 o:depends("tls", "1")
 o.rmempty = true
 
 -- XTLS
+if nixio.fs.access("/usr/bin/xray") or nixio.fs.access("/usr/bin/xray/xray") then
 o = s:option(Flag, "xtls", translate("XTLS"))
 o.rmempty = true
 o.default = "0"
-o:depends({type="vless", tls="1"})
-o:depends({type="xray", tls="1"})
+o:depends({type="vless",transport="tcp",tls=false})
+end
 
 -- Flow
 o = s:option(Value, "vless_flow", translate("Flow"))
 for _, v in ipairs(flows) do o:value(v, v) end
 o.rmempty = true
-o.default = "xtls-rprx-origin"
-o:depends("xtls", "1")
+o.default = "xtls-rprx-splice"
+o:depends("xtls", true)
+
+-- [[ allowInsecure ]]--
+o = s:option(Flag, "insecure", translate("allowInsecure"))
+o.rmempty = false
+o:depends("tls", true)
+o:depends("xtls",true)
+o.description = translate("If true, allowss insecure connection at TLS client, e.g., TLS server uses unverifiable certificates.")
 
 -- [[ Mux ]]--
 o = s:option(Flag, "mux", translate("Mux"))
-o.rmempty = true
-o.default = "0"
-o:depends("type", "v2ray")
-o:depends("type", "vless")
+o.rmempty = false
+o:depends("type", "vmess")
+o:depends({type="vless", xtls=false})
 
 o = s:option(Value, "concurrency", translate("Concurrency"))
 o.datatype = "uinteger"
@@ -451,9 +442,8 @@ o = s:option(Flag, "certificate", translate("Self-signed Certificate"))
 o.rmempty = true
 o.default = "0"
 o:depends("type", "trojan")
-o:depends("type", "v2ray")
+o:depends("type", "vmess")
 o:depends("type", "vless")
-o:depends("type", "xray")
 o.description = translate("If you have a self-signed certificate,please check the box")
 
 o = s:option(DummyValue, "upload", translate("Upload"))
